@@ -28,9 +28,10 @@ jobs:
       - name: Check local versions
         id: local_check
         run: |
-          NC_CURRENT=$(grep 'night_config_version=' gradle.properties | cut -d'=' -f2)
-          MOD_CURRENT=$(grep 'mod_version=' gradle.properties | cut -d'=' -f2)
+          NC_CURRENT=$(grep 'night_config_version=' build.properties | cut -d'=' -f2 | xargs)
+          MOD_CURRENT=$(grep 'mod_version=' build.properties | cut -d'=' -f2 | xargs)
           
+          echo "Current NC in file: '$NC_CURRENT'"
           echo "current_nc=$NC_CURRENT" >> $GITHUB_OUTPUT
           echo "current_mod=$MOD_CURRENT" >> $GITHUB_OUTPUT
 
