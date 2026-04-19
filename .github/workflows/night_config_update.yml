@@ -1,0 +1,65 @@
+name: Auto Update NightConfig
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions:checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest NightConfig version
+        id: nc_check
+        run: |
+          LATEST_VERSION=$(gh api repos/TheElectronWill/night-config/releases/latest --jq .tag_name | sed 's/v//')
+          echo "latest_nc=$LATEST_VERSION" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check local versions
+        id: local_check
+        run: |
+          NC_CURRENT=$(grep 'night_config_version=' build.properties | cut -d'=' -f2)
+          MOD_CURRENT=$(grep 'mod_version=' build.properties | cut -d'=' -f2)
+          
+          echo "current_nc=$NC_CURRENT" >> $GITHUB_OUTPUT
+          echo "current_mod=$MOD_CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Update and Release
+        if: steps.nc_check.outputs.latest_nc != steps.local_check.outputs.current_nc
+        run: |
+          LATEST_NC=${{ steps.nc_check.outputs.latest_nc }}
+          OLD_NC=${{ steps.local_check.outputs.current_nc }}
+          CURRENT_MOD=${{ steps.local_check.outputs.current_mod }}
+          
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_MOD"
+          VERSION_PARTS[2]=$((VERSION_PARTS[2] + 1))
+          NEW_MOD_VERSION="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.${VERSION_PARTS[2]}"
+          
+          sed -i "s/night_config_version=.*/night_config_version=$LATEST_NC/" build.properties
+          sed -i "s/mod_version=.*/mod_version=$NEW_MOD_VERSION/" build.properties
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add build.properties
+          git commit -m "Update NightConfig version from $OLD_NC to $LATEST_NC"
+          git push
+          
+          chmod +x gradlew
+          ./gradlew build
+          
+          gh release create "v$NEW_MOD_VERSION" build/libs/*.jar \
+            --title "Release v$NEW_MOD_VERSION" \
+            --notes "Automated update of NightConfig to $LATEST_NC"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
